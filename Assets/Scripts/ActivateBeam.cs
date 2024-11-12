@@ -32,11 +32,9 @@ public class ActivateBeam : MonoBehaviour
         audioData.Stop();
     }
 
-    // Update is called once per frame
     void Update()
     {
-        bool triggerValue;
-        if (controller.TryGetFeatureValue(CommonUsages.triggerButton, out triggerValue))
+        if (controller.TryGetFeatureValue(CommonUsages.triggerButton, out bool triggerValue))
         {
             if (triggerValue && !triggerPressed)
             {
