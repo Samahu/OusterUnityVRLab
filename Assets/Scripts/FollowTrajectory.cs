@@ -12,7 +12,7 @@ public class FollowTrajectory : MonoBehaviour
     private int currSequence = 0;
     private Transform cam_transform;
     private Transform map_transform;
-    private const float UPDATE_INTERVAL = 0.01f;
+    private float UPDATE_INTERVAL = 0.05f;
 
     void Start()
     {
@@ -21,8 +21,29 @@ public class FollowTrajectory : MonoBehaviour
         map_transform = GameObject.Find("full_map").transform;
     }
 
+    private void UpdateSpeed() {
+        if (Input.GetKeyDown("+") || Input.GetKeyDown("="))
+        {
+            UPDATE_INTERVAL -= 0.01f;
+            if (UPDATE_INTERVAL < 0.01f)
+                UPDATE_INTERVAL = 0.01f;
+            Debug.Log("UPDATE INTERVAL: " + UPDATE_INTERVAL);
+        }
+
+        if (Input.GetKeyDown("-"))
+        {
+            UPDATE_INTERVAL += 0.01f;
+
+            if (UPDATE_INTERVAL >= 1.0f)
+                UPDATE_INTERVAL = 1.0f;
+            Debug.Log("UPDATE INTERVAL: " + UPDATE_INTERVAL);
+        }
+    }
+
     void Update()
     {
+        UpdateSpeed();
+
         elapsedTime += Time.deltaTime;
         if (elapsedTime - lastUpdate > UPDATE_INTERVAL) {
             lastUpdate = elapsedTime;

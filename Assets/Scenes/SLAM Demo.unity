@@ -238,6 +238,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: flashLight
       objectReference: {fileID: 0}
+    - target: {fileID: 2036243880081968831, guid: 564ee70803d2e594b97da8ae2b1d1aa8, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 5480444015496400213, guid: 564ee70803d2e594b97da8ae2b1d1aa8, type: 3}
       propertyPath: m_Enabled
       value: 0
@@ -647,6 +651,10 @@ PrefabInstance:
     - target: {fileID: 100000, guid: 1cec7e442949718499ea34a4e37ba8fb, type: 3}
       propertyPath: m_Name
       value: ConeCollider
+      objectReference: {fileID: 0}
+    - target: {fileID: 100000, guid: 1cec7e442949718499ea34a4e37ba8fb, type: 3}
+      propertyPath: m_IsActive
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 400000, guid: 1cec7e442949718499ea34a4e37ba8fb, type: 3}
       propertyPath: m_LocalScale.x
