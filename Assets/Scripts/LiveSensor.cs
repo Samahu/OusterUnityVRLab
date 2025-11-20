@@ -1,30 +1,46 @@
 using UnityEngine;
 using OusterSdkCSharp;
+using System.Collections.Generic;
+using System.Linq;
+using UnityEngine.XR;
 
 public class LiveSensor : MonoBehaviour
 {
-    public GameObject boxFilter;
-
-    public string sensorURL = "169.254.101.54";
+    public string sensorURL;
 
     private OusterScanSource scanSource;
 
-    private Collider collider;
+    public GameObject boxFilter;
+    private Collider boxFilterCollider;
+
+    private List<Vector3> filteredPoints;
+    private List<Color> filteredColors;
+
+    private List<Vector3> ghostPoints = new List<Vector3>();
+    private List<Color> ghostColors = new List<Color>();
+
+    private List<Vector3> headPoints = new List<Vector3>();
+    private List<Color> headColors = new List<Color>();
+
+    public GameObject colliderObject;
+
+    // Cached collider for ghost gravitation (avoid GetComponent each frame)
+    private Collider gravCollider;
+
+    const float cooldownSeconds = 1f;
+    private float lastAcceptTime = -100f;
+    private bool lastPhysicalPressed = false;
+
+    public Transform controllerTransform;
 
     void Start()
     {
         MeshFilter meshFilter = GetComponent<MeshFilter>();
-        Mesh mesh = meshFilter.sharedMesh;
-        collider = boxFilter?.GetComponent<Collider>();
+        meshFilter.mesh.Clear();
 
-        Color[] colors = new Color[mesh.vertexCount];
-        Vector3[] vertices = new Vector3[mesh.vertexCount];
-        for (int i = 0; i < colors.Length; ++i) {
-            colors[i] = Color.gray;
-            vertices[i] = Vector3.zero;
-        }
-        mesh.colors = colors;
-        mesh.vertices = vertices;
+        boxFilterCollider = boxFilter?.GetComponent<Collider>();
+        gravCollider = colliderObject ? colliderObject.GetComponent<Collider>() : null;
+
 
         scanSource = OusterScanSource.Create(sensorURL);
         if (scanSource is null)
@@ -34,6 +50,9 @@ public class LiveSensor : MonoBehaviour
         }
 
         Debug.Log("Metadata: " + scanSource.GetMetadata());
+
+        filteredPoints = new List<Vector3>(scanSource.Width * scanSource.Height);
+        filteredColors = new List<Color>(scanSource.Width * scanSource.Height);
     }
 
     void OnDestroy()
@@ -41,73 +60,127 @@ public class LiveSensor : MonoBehaviour
         scanSource?.Dispose();
     }
 
-    (byte, byte) getMinMax(byte[,] reflectivity)
+    private bool filterPoint(Vector3 point, out Vector3 tpoint)
     {
-        byte minReflectivity = byte.MaxValue;
-        byte maxReflectivity = byte.MinValue;
-
-        for (int y = 0; y < reflectivity.GetLength(0); ++y)
-        {
-            for (int x = 0; x < reflectivity.GetLength(1); ++x)
-            {
-                byte value = reflectivity[y, x];
-                if (value < minReflectivity) minReflectivity = value;
-                if (value > maxReflectivity) maxReflectivity = value;
-            }
-        }
-
-        return (minReflectivity, maxReflectivity);
+        tpoint = transform.TransformPoint(point);
+        return boxFilterCollider.ClosestPoint(tpoint) != tpoint;
     }
 
-    private bool filterPoint(Vector3 point)
+    void GravitateGhostPoints()
     {
-        Vector3 tpoint = transform.TransformPoint(point);
-        return collider.ClosestPoint(tpoint) != tpoint;
+        if (colliderObject != null && colliderObject.activeSelf)
+        {
+            Collider collider = colliderObject.GetComponent<Collider>();
+            // Vector3 controllerCenter = controllerTransform.position;
+            Vector3 direction;
+            for (int i = 0; i < ghostPoints.Count; ++i)
+            {
+                Vector3 point = transform.TransformPoint(ghostPoints[i]);
+                if (collider.ClosestPoint(point) == point)
+                {
+                    // Move point slightly towards the center of the controller
+                    direction = (controllerCenter - ghostPoints[i]).normalized;
+                    ghostPoints[i] += direction * 0.1f;
+                }
+            }
+        }
     }
 
     void Update()
     {
-        MeshFilter meshFilter = GetComponent<MeshFilter>();
-        Mesh mesh = meshFilter.sharedMesh;
-        Vector3[] vertices = mesh.vertices;
-        Color[] colors = mesh.colors;
+        // Capture snapshot of filtered points/colors when grip button is pressed
+        if (GripButtonPressed())
+        {
+            ghostPoints.AddRange(filteredPoints);
+            ghostColors.AddRange(filteredColors);
+            ghostPoints.AddRange(headPoints);
+            ghostColors.AddRange(headColors);
+            Debug.Log($"Ghost snapshot stored: {ghostPoints.Count} points");
+        }
 
         using var scan = scanSource.NextScan(0);
         if (scan is null)
             return;
 
         float[] xyz = scan.GetXYZ(filterInvalid: false);
+        if (xyz == null)
+        {
+            return; // no new data or don't update when frozen
+        }
+
+        filteredPoints.Clear();
+        filteredColors.Clear();
+        headPoints.Clear();
+        headColors.Clear();
+
         int w = scan.Width;
         int h = scan.Height;
 
-        if (xyz == null || h == 0)
-        {
-            return; // no new data this frame
-        }
-
-        var maxPoints = Mathf.Min(vertices.Length, xyz.Length / 3);
+        // inside check it is head
+        Vector3 camPosition = Camera.main.transform.position;
 
         for (int y = 0; y < h; ++y)
         {
             for (int x = 0; x < w; ++x)
             {
                 int i = y * w + x;
-                if (i >= maxPoints)
-                    break;
-
                 Vector3 point = new Vector3(
-                        xyz[3 * i + 0],
-                        xyz[3 * i + 1],
-                        xyz[3 * i + 2]);
-                float hue = (float)y / (h - 1); // normalize
-                colors[i] = Color.HSVToRGB(hue, 1f, 1f);
-                Vector3 tpoint = transform.TransformPoint(point);
-                vertices[i] = filterPoint(point) ? Vector3.zero : point;
+                    xyz[3 * i + 0],
+                    xyz[3 * i + 1],
+                    xyz[3 * i + 2]);
+
+                if (!filterPoint(point, out Vector3 tpoint))
+                {
+                    bool headPoint = (camPosition - tpoint).sqrMagnitude < (0.2f*0.2f);
+
+                    float hue = (float)y / (h - 1); // normalize
+                    Color color = Color.HSVToRGB(hue, 1f, 1f);
+
+                    if (headPoint) {
+                        headPoints.Add(point);
+                        headColors.Add(color);
+                    }
+                    else
+                    {
+                        filteredPoints.Add(point);
+                        filteredColors.Add(color);
+                    }
+                }
             }
         }
 
-        mesh.colors = colors;
-        mesh.vertices = vertices;
+        GravitateGhostPoints();
+
+        // Combine filtered points with ghost points
+        if (ghostPoints.Count > 0)
+        {
+            filteredPoints.AddRange(ghostPoints);
+            filteredColors.AddRange(ghostColors);
+        }
+
+        MeshFilter meshFilter = GetComponent<MeshFilter>();
+        Mesh mesh = meshFilter.mesh;
+        mesh.Clear();
+        mesh.vertices = filteredPoints.ToArray();
+        mesh.SetIndices(
+            Enumerable.Range(0, filteredPoints.Count).ToArray(), 
+            MeshTopology.Points, 0);
+        mesh.colors = filteredColors.ToArray();
     }
 
+    private bool GripButtonPressed()
+    {
+        InputDevice controller = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
+        bool physicalPressed = controller.TryGetFeatureValue(CommonUsages.gripButton, out bool pressed) && pressed;
+        bool accept = false;
+        // Rising edge && cooldown satisfied
+        if (physicalPressed && !lastPhysicalPressed && (Time.time - lastAcceptTime) >= cooldownSeconds)
+        {
+            accept = true;
+            lastAcceptTime = Time.time;
+        }
+
+        lastPhysicalPressed = physicalPressed;
+        return accept;
+    }
 }

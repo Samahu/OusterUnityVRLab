@@ -34,7 +34,7 @@ Material:
     - _Disparity: 0.099
     - _Distance: 1
     - _FOV: 1.369
-    - _PointSize: 0.03
+    - _PointSize: 0.005
     m_Colors:
     - _Tint: {r: 0.44654083, g: 0.44654083, b: 0.44654083, a: 1}
   m_BuildTextureStacks: []

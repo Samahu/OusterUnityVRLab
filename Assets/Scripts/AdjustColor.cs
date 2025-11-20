@@ -4,6 +4,7 @@ public class AdjustColor : MonoBehaviour
 {
     public GameObject colliderObject;
 
+    private Vector3[] originalVertices;
     private Color[] originalColors;
 
     void Start()
@@ -11,6 +12,7 @@ public class AdjustColor : MonoBehaviour
         MeshFilter meshFilter = GetComponent<MeshFilter>();
         Mesh mesh = meshFilter.sharedMesh;
         originalColors = mesh.colors;
+        originalVertices = mesh.vertices;
 
         Color[] colors = new Color[originalColors.Length];
         for (int i = 0; i < colors.Length; ++i)
@@ -23,6 +25,7 @@ public class AdjustColor : MonoBehaviour
         // restore saved colors
         MeshFilter meshFilter = GetComponent<MeshFilter>();
         Mesh mesh = meshFilter.sharedMesh;
+        mesh.vertices = originalVertices;
         mesh.colors = originalColors;
     }
 
